@@ -1,7 +1,7 @@
-@define-color color1 #ED6500;
-@define-color color2 #B10080;
-@define-color color3 #009384;
-@define-color color4 #A7E100;
+@define-color color1 #3c8888;
+@define-color color2 #287474;
+@define-color color3 #146060;
+@define-color color4 #004c4c;
 @define-color bg #13181C;
 @define-color active #324A5E;
 @define-color echo #007D70;
@@ -20,6 +20,7 @@
 junction,
 list row,
 treeview.view,
+combobox arrow,
 window {
     background-color: @bg;
 }
@@ -28,7 +29,6 @@ button {
     background-color: @bg;
 }
 
-button:focus,
 button:active {
     background-color: @active;
 }
