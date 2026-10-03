@@ -1,74 +1,101 @@
 import gi
+
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
+
 from ks_includes.screen_panel import ScreenPanel
 
 
 class Panel(ScreenPanel):
+    distances = [".5", "1", "2", "5", "10", "15"]
+    distance = "5"
+
     def __init__(self, screen, title):
         title = title or _("Bed Angle")
         super().__init__(screen, title)
 
-        self.stack = Gtk.Stack()
-        self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-        self.stack.set_transition_duration(100)
+        # Plus shaped controls: A angle on the vertical axis, B angle on the horizontal axis
+        self.buttons = {
+            "a-": self._gtk.Button("arrow-up", "A-", "color1"),
+            "a+": self._gtk.Button("arrow-down", "A+", "color1"),
+            "b-": self._gtk.Button("arrow-left", "B-", "color2"),
+            "b+": self._gtk.Button("arrow-right", "B+", "color2"),
+        }
+        self.buttons["a+"].connect("clicked", self.rotate, "A", "+")
+        self.buttons["a-"].connect("clicked", self.rotate, "A", "-")
+        self.buttons["b-"].connect("clicked", self.rotate, "B", "-")
+        self.buttons["b+"].connect("clicked", self.rotate, "B", "+")
 
-        main_menu = Gtk.Grid(row_homogeneous=True, column_homogeneous=True)
-        aangle_btn = self._gtk.Button("menu", _("A Angle"), "color3")
-        bangle_btn = self._gtk.Button("menu", _("B Angle"), "color4")
+        self.labels["step"] = Gtk.Label()
+        self.update_step_label()
 
-        aangle_btn.connect("clicked", self.show_submenu, "aangle")
-        bangle_btn.connect("clicked", self.show_submenu, "bangle")
+        grid = Gtk.Grid(row_homogeneous=True, column_homogeneous=True)
+        grid.attach(self.buttons["a-"], 1, 0, 1, 1)
+        grid.attach(self.buttons["b-"], 0, 1, 1, 1)
+        grid.attach(self.labels["step"], 1, 1, 1, 1)
+        grid.attach(self.buttons["b+"], 2, 1, 1, 1)
+        grid.attach(self.buttons["a+"], 1, 2, 1, 1)
 
-        main_menu.attach(aangle_btn, 0, 0, 1, 1)
-        main_menu.attach(bangle_btn, 1, 0, 1, 1)
+        distgrid = Gtk.Grid()
+        for j, i in enumerate(self.distances):
+            self.labels[i] = self._gtk.Button(label=i)
+            self.labels[i].set_direction(Gtk.TextDirection.LTR)
+            self.labels[i].connect("clicked", self.change_distance, i)
+            ctx = self.labels[i].get_style_context()
+            ctx.add_class("horizontal_togglebuttons")
+            if i == self.distance:
+                ctx.add_class("horizontal_togglebuttons_active")
+            distgrid.attach(self.labels[i], j, 0, 1, 1)
 
-        aangle = Gtk.Grid(row_homogeneous=True, column_homogeneous=True)
-        aangle_buttons = [
-            ("arrow-up", "G14 A1 B0 R", _("A Angle +1°")),
-            ("arrow-up", "G14 A5 B0 R", _("A Angle +5°")),
-            ("arrow-up", "G14 A10 B0 R", _("A Angle +10°")),
-            ("arrow-down", "G14 A-1 B0 R", _("A Angle -1°")),
-            ("arrow-down", "G14 A-5 B0 R", _("A Angle -5°")),
-            ("arrow-down", "G14 A-10 B0 R", _("A Angle -10°")),
-        ]
-        for i, (icon, gcode, label) in enumerate(aangle_buttons):
-            btn = self._gtk.Button(icon, label, "color1")
-            btn.connect("clicked", self.send_gcode, gcode)
-            aangle.attach(btn, i % 3, i // 3, 1, 1)
+        self.labels["angle_dist"] = Gtk.Label(label=_("Rotation Angle (°)"))
 
-        back_btn1 = self._gtk.Button("back", _("Back"), "color2")
-        back_btn1.connect("clicked", self.show_submenu, "main_menu")
-        aangle.attach(back_btn1, 0, 2, 3, 1)
+        # Current angles reported by the melt Klipper module
+        self.labels["a_angle"] = Gtk.Label()
+        self.labels["b_angle"] = Gtk.Label()
+        # A angle | label | B angle share one row so the selector keeps its space
+        current = Gtk.Grid(column_homogeneous=True)
+        current.attach(self.labels["a_angle"], 0, 0, 1, 1)
+        current.attach(self.labels["angle_dist"], 1, 0, 2, 1)
+        current.attach(self.labels["b_angle"], 3, 0, 1, 1)
+        # Sit at the bottom of the row, next to the angle selector
+        current.set_valign(Gtk.Align.END)
+        current.set_margin_bottom(4)
+        self.update_angles()
 
-        bangle = Gtk.Grid(row_homogeneous=True, column_homogeneous=True)
-        bangle_buttons = [
-            ("arrow-up", "G14 A0 B1 R", _("B Angle +1°")),
-            ("arrow-up", "G14 A0 B5 R", _("B Angle +5°")),
-            ("arrow-up", "G14 A0 B10 R", _("B Angle +10°")),
-            ("arrow-down", "G14 A0 B-1 R", _("B Angle -1°")),
-            ("arrow-down", "G14 A0 B-5 R", _("B Angle -5°")),
-            ("arrow-down", "G14 A0 B-10 R", _("B Angle -10°")),
-        ]
-        for i, (icon, gcode, label) in enumerate(bangle_buttons):
-            btn = self._gtk.Button(icon, label, "color2")
-            btn.connect("clicked", self.send_gcode, gcode)
-            bangle.attach(btn, i % 3, i // 3, 1, 1)
+        layout = Gtk.Grid(row_homogeneous=True, column_homogeneous=True)
+        layout.attach(grid, 0, 0, 1, 4)
+        layout.attach(current, 0, 4, 1, 1)
+        layout.attach(distgrid, 0, 5, 1, 1)
 
-        back_btn2 = self._gtk.Button("back", _("Back"), "color3")
-        back_btn2.connect("clicked", self.show_submenu, "main_menu")
-        bangle.attach(back_btn2, 0, 2, 3, 1)
+        self.content.add(layout)
 
-        self.stack.add_named(main_menu, "main_menu")
-        self.stack.add_named(aangle, "aangle")
-        self.stack.add_named(bangle, "bangle")
+    def update_angles(self):
+        for axis in ("a", "b"):
+            value = self._printer.get_stat("melt", f"{axis}_angle")
+            text = f"{value:.1f}°" if isinstance(value, (int, float)) else "?"
+            self.labels[f"{axis}_angle"].set_markup(f"<b>{axis.upper()}:</b> {text}")
 
-        self.content.add(self.stack)
+    def process_update(self, action, data):
+        if action == "notify_status_update" and "melt" in data:
+            self.update_angles()
 
-        self.stack.set_visible_child_name("main_menu")
+    def update_step_label(self):
+        self.labels["step"].set_text(f"± {self.distance}°")
 
-    def show_submenu(self, widget, menu_name):
-        self.stack.set_visible_child_name(menu_name)
+    def change_distance(self, widget, distance):
+        self.labels[f"{self.distance}"].get_style_context().remove_class(
+            "horizontal_togglebuttons_active"
+        )
+        self.labels[f"{distance}"].get_style_context().add_class("horizontal_togglebuttons_active")
+        self.distance = distance
+        self.update_step_label()
 
-    def send_gcode(self, widget, gcode):
-        self._screen._send_action(widget, "printer.gcode.script", {"script": gcode})
+    def rotate(self, widget, axis, direction):
+        angle = f"{float(self.distance):g}"
+        if direction == "-":
+            angle = f"-{angle}"
+        a = angle if axis == "A" else "0"
+        b = angle if axis == "B" else "0"
+        self._screen._send_action(
+            widget, "printer.gcode.script", {"script": f"G14 A{a} B{b} R"}
+        )

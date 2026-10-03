@@ -95,6 +95,11 @@ class HeaterGraph(Gtk.DrawingArea):
         height = da.get_allocated_height() - self.font_size * 2
         gsize = [[x, y], [width, height]]
 
+        # Solid gray plot area so the window background design doesn't show through
+        ctx.set_source_rgb(0.09, 0.1, 0.11)
+        ctx.rectangle(x, y, width - x, height - y)
+        ctx.fill()
+
         ctx.set_source_rgb(color.red, color.green, color.blue)
         ctx.set_line_width(1)
         ctx.set_tolerance(1)

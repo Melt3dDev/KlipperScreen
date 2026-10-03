@@ -65,7 +65,7 @@ treeview.view check:checked {
 
 button {
     background-image: none;
-    background-color: @bg;
+    background-color: alpha(@bg, 0.8);
     margin: .2em;
     padding: 0.25em;
     border-radius: 0;

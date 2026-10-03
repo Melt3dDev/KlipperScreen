@@ -35,6 +35,7 @@ class Panel(ScreenPanel):
             "y-": self._gtk.Button("arrow-down", "Y-", "color2"),
             "z+": self._gtk.Button("z-farther", "Z+", "color3"),
             "z-": self._gtk.Button("z-closer", "Z-", "color3"),
+            "fine_tune": self._gtk.Button("fine-tune", _("Fine Tuning"), "color3"),
             "home": self._gtk.Button("home", _("Home"), "color4"),
             "motors_off": self._gtk.Button("motor-off", _("Disable Motors"), "color4"),
             "switch_toolhead": self._gtk.Button("toolchanger", "", "color4"),
@@ -43,6 +44,9 @@ class Panel(ScreenPanel):
         self.buttons["x-"].connect("clicked", self.move, "X", "-")
         self.buttons["y+"].connect("clicked", self.move, "Y", "+")
         self.buttons["y-"].connect("clicked", self.move, "Y", "-")
+        self.buttons["fine_tune"].connect(
+            "clicked", self.menu_item_clicked, {"panel": "fine_tune", "name": _("Fine Tuning")}
+        )
         self.buttons["z+"].connect("clicked", self.move, "Z", "+")
         self.buttons["z-"].connect("clicked", self.move, "Z", "-")
         self.buttons["home"].connect("clicked", self.home)
@@ -102,15 +106,8 @@ class Panel(ScreenPanel):
             grid.attach(self.buttons[zm], 3, 1, 1, 1)
             grid.attach(self.buttons[zp], 3, 0, 1, 1)
 
-        grid.attach(self.buttons["home"], 0, 0, 1, 1)
-
-        has_dual_carriage = "dual_carriage" in self._printer.get_config_section_list()
-        has_t1 = "T1" in self._printer.available_commands
-        extra_button = self.buttons["motors_off"]
-        if has_dual_carriage and has_t1:
-            extra_button = self.buttons["switch_toolhead"]
-            self.set_toolhead_label()
-        grid.attach(extra_button, 2, 0, 1, 1)
+        grid.attach(self.buttons["fine_tune"], 0, 0, 1, 1)
+        grid.attach(self.buttons["home"], 2, 0, 1, 1)
 
         distgrid = Gtk.Grid()
         for j, i in enumerate(self.distances):
@@ -222,6 +219,18 @@ class Panel(ScreenPanel):
         for option in configurable_options:
             name = list(option)[0]
             self.options.update(self.add_option("options", self.settings, name, option[name]))
+
+        # Disable Motors (and the toolhead switch on dual carriage) live in the settings menu
+        actions = Gtk.Grid(column_homogeneous=True)
+        actions.attach(self.buttons["motors_off"], 0, 0, 1, 1)
+        has_dual_carriage = "dual_carriage" in self._printer.get_config_section_list()
+        has_t1 = "T1" in self._printer.available_commands
+        if has_dual_carriage and has_t1:
+            self.set_toolhead_label()
+            actions.attach(self.buttons["switch_toolhead"], 1, 0, 1, 1)
+        actions.set_size_request(-1, self._gtk.font_size * 5)
+        self.labels["options"].insert_row(0)
+        self.labels["options"].attach(actions, 0, 0, 1, 1)
 
     def reinit_panels(self, value):
         self._screen.panels_reinit.append("bed_level")

@@ -7,6 +7,7 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 from datetime import datetime
+import math
 from math import log
 
 from gi.repository import GdkPixbuf, Gio, GLib, Gtk, Pango
@@ -25,6 +26,14 @@ except ImportError:
 
 
 class BasePanel(ScreenPanel):
+    # Background line colors (color1..color4 from the theme)
+    LINE_COLORS = (
+        (0x3C / 255, 0x88 / 255, 0x88 / 255),
+        (0x28 / 255, 0x74 / 255, 0x74 / 255),
+        (0x14 / 255, 0x60 / 255, 0x60 / 255),
+        (0x00 / 255, 0x4C / 255, 0x4C / 255),
+    )
+
     def __init__(self, screen, title=None):
         super().__init__(screen, title)
         self.current_panel = None
@@ -124,15 +133,64 @@ class BasePanel(ScreenPanel):
         self.titlebar.get_style_context().add_class("title_bar")
         self.titlebar.add(self.control["item_box"])
         self.titlebar.add(self.titlelbl)
+        self.labels["network_icon"] = self._gtk.Image()
+        self.control["network_box"] = Gtk.Box(halign=Gtk.Align.END)
+        self.control["network_box"].set_no_show_all(True)
+        self.control["network_box"].add(self.labels["network_icon"])
+        self.labels["network_icon"].show()
+        self.network_icon_name = None
+
+        self.titlebar.add(self.control["network_box"])
         self.titlebar.add(self.control["time_box"])
         self.titlebar.add(self.control["battery_box"])
         self.set_title(title)
 
         # Main layout
         self.main_grid = Gtk.Grid()
+        self.main_grid.connect("draw", self.draw_panel_background)
         self._build_main_grid()
 
         self.update_time()
+        self.network_update = None
+        self.update_network_icon()
+
+    def draw_panel_background(self, widget, ctx):
+        # Abstract line design behind every panel (titlebar and action bar included)
+        if not self._config.get_main_config().getboolean("show_background", True):
+            return False
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        ctx.set_line_cap(1)  # round
+
+        # Flowing waves across the window
+        for i in range(6):
+            r, g, b = self.LINE_COLORS[i % 4]
+            ctx.set_source_rgba(r, g, b, 0.35)
+            ctx.set_line_width(1.5 + (i % 3))
+            y0 = h * (0.15 + i * 0.14)
+            amp = h * (0.08 + 0.02 * (i % 4))
+            phase = i * 0.7
+            ctx.move_to(-10, y0)
+            steps = 40
+            for s in range(1, steps + 1):
+                x = -10 + (w + 20) * s / steps
+                y = y0 + amp * math.sin(phase + 2 * math.pi * s / steps * 1.2)
+                ctx.line_to(x, y)
+            ctx.stroke()
+
+        # Diagonal accent strokes in the corners
+        for i in range(4):
+            r, g, b = self.LINE_COLORS[i]
+            ctx.set_source_rgba(r, g, b, 0.7)
+            ctx.set_line_width(2)
+            off = i * 12
+            ctx.move_to(w - 70 + off, 0)
+            ctx.line_to(w, 70 - off)
+            ctx.stroke()
+            ctx.move_to(0, h - 70 + off)
+            ctx.line_to(70 - off, h)
+            ctx.stroke()
+        return False
 
     def _reconfigure_main_grid(self):
         self.main_grid.remove(self.titlebar)
@@ -184,6 +242,8 @@ class BasePanel(ScreenPanel):
 
         self.battery_icons = self.load_battery_icons()
         self.battery_percentage()
+        self.network_icon_name = None
+        self.update_network_icon()
 
     def get_spoolman_icon_pixbuf(self, colors=None):
         if not colors:
@@ -346,6 +406,8 @@ class BasePanel(ScreenPanel):
             self.time_update = GLib.timeout_add_seconds(1, self.update_time)
         if self.battery_update is None:
             self.battery_update = GLib.timeout_add_seconds(60, self.battery_percentage)
+        if self.network_update is None:
+            self.network_update = GLib.timeout_add_seconds(5, self.update_network_icon)
 
     def set_spoolman_refresh(self):
         if self.spoolman_update is None:
@@ -656,6 +718,74 @@ class BasePanel(ScreenPanel):
                 self.control["time"].set_text(f"{now:%I:%M %p}")
             self.time_min = now.minute
             self.time_format = confopt
+        return True
+
+    @staticmethod
+    def get_network_status():
+        """Returns ("ethernet", None), ("wifi", quality 0-100) or (None, None)"""
+        wifi = None
+        try:
+            interfaces = os.listdir("/sys/class/net")
+        except OSError:
+            return None, None
+        for iface in sorted(interfaces):
+            path = os.path.join("/sys/class/net", iface)
+            try:
+                # Only ethernet-like interfaces (skips lo, can, etc.)
+                with open(os.path.join(path, "type")) as f:
+                    if f.read().strip() != "1":
+                        continue
+                with open(os.path.join(path, "operstate")) as f:
+                    if f.read().strip() != "up":
+                        continue
+            except OSError:
+                continue
+            if os.path.isdir(os.path.join(path, "wireless")):
+                if wifi is None:
+                    wifi = BasePanel.get_wifi_quality(iface)
+            elif not os.path.isdir(os.path.join(path, "bridge")):
+                return "ethernet", None
+        if wifi is not None:
+            return "wifi", wifi
+        return None, None
+
+    @staticmethod
+    def get_wifi_quality(iface):
+        try:
+            with open("/proc/net/wireless") as f:
+                for line in f.readlines()[2:]:
+                    name, data = line.split(":", 1)
+                    if name.strip() == iface:
+                        return min(100, int(float(data.split()[1]) * 100 / 70))
+        except (OSError, ValueError, IndexError):
+            pass
+        return 100
+
+    def update_network_icon(self):
+        kind, quality = self.get_network_status()
+        if kind == "ethernet":
+            icon = "network"
+        elif kind == "wifi":
+            if quality > 75:
+                icon = "wifi_excellent"
+            elif quality > 50:
+                icon = "wifi_good"
+            elif quality > 25:
+                icon = "wifi_fair"
+            else:
+                icon = "wifi_weak"
+        else:
+            icon = None
+        if icon is None:
+            self.control["network_box"].hide()
+        else:
+            if icon != self.network_icon_name:
+                img_size = self._gtk.img_scale * self.bts
+                self.labels["network_icon"].set_from_pixbuf(
+                    self._gtk.PixbufFromIcon(icon, img_size, img_size)
+                )
+            self.control["network_box"].show()
+        self.network_icon_name = icon
         return True
 
     def get_battery_icon(self, charge: float, plugged: bool):

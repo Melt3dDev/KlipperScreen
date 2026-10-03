@@ -26,7 +26,7 @@ window {
 }
 
 button {
-    background-color: @bg;
+    background-color: alpha(@bg, 0.8);
 }
 
 button:active {

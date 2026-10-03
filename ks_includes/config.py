@@ -191,6 +191,7 @@ class KlipperScreenConfig:
                     "24htime",
                     "only_heaters",
                     "show_cursor",
+                    "show_background",
                     "confirm_estop",
                     "autoclose_popups",
                     "use_dpms",
@@ -488,6 +489,16 @@ class KlipperScreenConfig:
                     "type": "binary",
                     "value": "True",
                     "callback": screen.reload_panels,
+                }
+            },
+            {
+                "show_background": {
+                    "section": "main",
+                    "name": _("Background Design"),
+                    "type": "binary",
+                    "tooltip": _("Show the abstract line design behind the panels"),
+                    "value": "True",
+                    "callback": lambda value: screen.base_panel.main_grid.queue_draw(),
                 }
             },
             {

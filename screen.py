@@ -360,6 +360,7 @@ class KlipperScreen(Gtk.ApplicationWindow):
                 "exclude_object": ["current_object", "objects", "excluded_objects"],
                 "manual_probe": ["is_active"],
                 "screws_tilt_adjust": ["results", "error", "max_deviation"],
+                "melt": ["a_angle", "b_angle"],
             }
         }
         for extruder in self.printer.get_tools():
