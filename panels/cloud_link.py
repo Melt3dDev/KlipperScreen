@@ -18,7 +18,7 @@ from ks_includes.screen_panel import ScreenPanel
 OBICO_DIR = os.path.expanduser("~/moonraker-obico")
 OBICO_CFG = os.path.expanduser("~/printer_data/config/moonraker-obico.cfg")
 OBICO_SERVICE = "moonraker-obico"
-OBICO_HOST = "meltvm.chocolate-cliff.ts.net"
+OBICO_HOST = "cloud.melt3d.eu"
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
 CODE_RE = re.compile(r"manual linking and enter:\s*(\S+)")
